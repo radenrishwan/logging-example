@@ -4,6 +4,10 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"time"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/radenrishwan/monitoring/metrics"
 )
 
 func initLogger() {
@@ -31,18 +35,35 @@ func main() {
 	server := http.NewServeMux()
 
 	server.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
 		generateRequestLog(r.URL.Path, r.Method, "")
 
 		w.Write([]byte("Hello, World!"))
+
+		// TODO: move into middleware later
+		metrics.RequestCounter.WithLabelValues(r.URL.Path, r.Method, http.StatusText(http.StatusOK)).Inc()
+		metrics.RequestDuration.
+			WithLabelValues(r.URL.Path, r.Method, http.StatusText(http.StatusOK)).
+			Observe(time.Since(start).Seconds())
 	})
 
 	server.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
 		generateRequestLog(r.URL.Path, r.Method, "")
 
 		w.Write([]byte("pong"))
+
+		metrics.RequestCounter.WithLabelValues(r.URL.Path, r.Method, http.StatusText(http.StatusOK)).Inc()
+		metrics.RequestDuration.
+			WithLabelValues(r.URL.Path, r.Method, http.StatusText(http.StatusOK)).
+			Observe(time.Since(start).Seconds())
 	})
 
+	server.Handle("/metrics", promhttp.Handler())
+
 	if err := http.ListenAndServe(":8080", server); err != nil {
-		panic(err)
+		slog.Error("Failed to start server", "error", err)
 	}
 }
